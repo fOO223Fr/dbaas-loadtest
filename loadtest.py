@@ -3,6 +3,7 @@ import argparse
 from os.path import exists
 from pathlib import Path
 import openshift as oc
+import time
 
 parser = argparse.ArgumentParser(description="Program to loadtest dbaas operator")
 parser.add_argument("--createprojects", help="Create projects", default=False, action="store_true")
@@ -41,10 +42,11 @@ def _get_role_binding_dict(username, projectname):
         ]
     }
 
+
 def _get_dbaas_tenant(username, projectname):
     return {
         "apiVersion": "dbaas.redhat.com/v1alpha1",
-        "kind": "DBaasTenant",
+        "kind": "DBaaSTenant",
         "metadata": {
             "name": username
         },
@@ -52,6 +54,7 @@ def _get_dbaas_tenant(username, projectname):
             "inventoryNamespace": projectname
         }
     }
+
 
 if args["file"]:
     filename = args["file"]
@@ -66,9 +69,15 @@ if args["file"]:
                 print(error)
 
 if args["createprojects"]:
-    for userIndex in range(1, TOTAL_USERS + 1, 1):
-        for projectIndex in range(1, 3, 1):
-            oc.new_project("user-" + str(userIndex) + "-project-" + str(projectIndex))
+    batchSize = 100
+    startUserIndexRange = 1
+    for endUserIndexRange in range(batchSize, TOTAL_USERS + 1, batchSize):
+        for userIndex in range(startUserIndexRange, endUserIndexRange + 1, 1):
+            for projectIndex in range(1, 3, 1):
+                oc.new_project("user-" + str(userIndex) + "-project-" + str(projectIndex))
+        print("Processed batch {} to {}".format(startUserIndexRange, endUserIndexRange))
+        startUserIndexRange = endUserIndexRange + 1
+        time.sleep(2)
 
 if args["deleteprojects"]:
     for userIndex in range(1, TOTAL_USERS + 1, 1):
@@ -76,27 +85,40 @@ if args["deleteprojects"]:
             oc.delete_project("user-" + str(userIndex) + "-project-" + str(projectIndex))
 
 if args["giveadminrights"]:
-    for userIndex in range(1, TOTAL_USERS + 1, 1):
-        username = "User-" + str(userIndex)
-        for projectIndex in range(1, 3, 1):
-            projectname = "user-" + str(userIndex) + "-project-" + str(projectIndex)
-            rolebinding = _get_role_binding_dict(username, projectname)
-            oc.apply(rolebinding)
+    batchSize = 100
+    startUserIndexRange = 1
+    for endUserIndexRange in range(batchSize, TOTAL_USERS + 1, batchSize):
+        for userIndex in range(startUserIndexRange, endUserIndexRange + 1, 1):
+            username = "user-" + str(userIndex)
+            for projectIndex in range(1, 3, 1):
+                projectname = "user-" + str(userIndex) + "-project-" + str(projectIndex)
+                rolebinding = _get_role_binding_dict(username, projectname)
+                oc.apply(rolebinding)
+        print("Processed batch {} to {}".format(startUserIndexRange, endUserIndexRange))
+        startUserIndexRange = endUserIndexRange + 1
+        time.sleep(1)
 
 if args["removeadminrights"]:
     for userIndex in range(1, TOTAL_USERS + 1, 1):
-        username = "user-" + str(userIndex)
+        username = "User-" + str(userIndex)
         for projectIndex in range(1, 3, 1):
             projectname = "user-" + str(userIndex) + "-project-" + str(projectIndex)
             rolebinding = _get_role_binding_dict(username, projectname)
             oc.delete(rolebinding)
 
 if args["createdbaastenant"]:
-    # for userIndex in range(1, TOTAL_USERS + 1, 1):
-        # username = "user-" + str(userIndex)
-        username = "user-2"
-        # The first project of every user is treated as a inventoryNamespace
-        # projectname = "user-" + str(userIndex) + "-project-1"
-        projectname = "user-2-project-1"
-        dbaastenant = _get_dbaas_tenant(username, projectname)
-        oc.apply(dbaastenant)
+    batchSize = 100
+    startUserIndexRange = 1
+    for endUserIndexRange in range(batchSize, TOTAL_USERS + 1, batchSize):
+        for userIndex in range(startUserIndexRange, endUserIndexRange + 1, 1):
+            username = "user-" + str(userIndex)
+            projectname = "user-" + str(userIndex) + "-project-1"
+            dbaastenant = _get_dbaas_tenant(username, projectname)
+            oc.apply(dbaastenant)
+        print("Processed batch {} to {}".format(startUserIndexRange, endUserIndexRange))
+        startUserIndexRange = endUserIndexRange + 1
+        time.sleep(1)
+
+# if args["test"]:
+#     prg = oc.new_project("test")
+#     print(prg.)
