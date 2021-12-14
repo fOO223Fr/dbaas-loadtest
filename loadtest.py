@@ -7,6 +7,8 @@ import time
 
 parser = argparse.ArgumentParser(description="Program to loadtest dbaas operator")
 parser.add_argument("--createprojects", help="Create projects", default=False, action="store_true")
+parser.add_argument("--from", help="Where to start from", required=True)
+parser.add_argument("--to", help="Where to end", required=True)
 parser.add_argument("--deleteprojects", help="Delete projects", default=False, action="store_true")
 parser.add_argument("--giveadminrights", help="Give rights of projects to users", default=False, action="store_true")
 parser.add_argument("--removeadminrights", help="Remove rights of projects from users", default=False,
@@ -20,13 +22,13 @@ args = vars(parser.parse_args())
 TOTAL_USERS = 2000
 
 
-def _get_role_binding_dict(username, projectname):
+def _get_role_binding_dict(user_name, project_name):
     return {
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "RoleBinding",
         "metadata": {
             "name": "admin-0",
-            "namespace": projectname
+            "namespace": project_name
         },
         "roleRef": {
             "apiGroup": "rbac.authorization.k8s.io",
@@ -37,21 +39,21 @@ def _get_role_binding_dict(username, projectname):
             {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "User",
-                "name": username
+                "name": user_name
             }
         ]
     }
 
 
-def _get_dbaas_tenant(username, projectname):
+def _get_dbaas_tenant(user_name, project_name):
     return {
         "apiVersion": "dbaas.redhat.com/v1alpha1",
         "kind": "DBaaSTenant",
         "metadata": {
-            "name": username
+            "name": user_name
         },
         "spec": {
-            "inventoryNamespace": projectname
+            "inventoryNamespace": project_name
         }
     }
 
@@ -68,56 +70,44 @@ if args["file"]:
             except htpasswd.basic.UserExists as error:
                 print(error)
 
-if args["createprojects"]:
-    batchSize = 100
-    startUserIndexRange = 1
-    for endUserIndexRange in range(batchSize, TOTAL_USERS + 1, batchSize):
-        for userIndex in range(startUserIndexRange, endUserIndexRange + 1, 1):
-            for projectIndex in range(1, 3, 1):
-                oc.new_project("user-" + str(userIndex) + "-project-" + str(projectIndex))
-        print("Processed batch {} to {}".format(startUserIndexRange, endUserIndexRange))
-        startUserIndexRange = endUserIndexRange + 1
-        time.sleep(2)
 
-if args["deleteprojects"]:
-    for userIndex in range(1, TOTAL_USERS + 1, 1):
-        for projectIndex in range(1, 3, 1):
-            oc.delete_project("user-" + str(userIndex) + "-project-" + str(projectIndex))
+def _process_batch(start_user_index, end_user_index):
+    for user_index in range(start_user_index, end_user_index + 1, 1):
+        user_name = "user-" + str(user_index)
+        for project_index in range(1, 3, 1):
+            if args["createprojects"]:
+                continue
+                # oc.new_project("user-" + str(user_index) + "-project-" + str(project_index))
+            if args["deleteprojects"]:
+                oc.delete_project("user-" + str(user_index) + "-project-" + str(project_index))
+            if args["giveadminrights"]:
+                project_name = "user-" + str(user_index) + "-project-" + str(project_index)
+                role_binding = _get_role_binding_dict(user_name, project_name)
+                oc.apply(role_binding)
+            if args["removeadminrights"]:
+                project_name = "user-" + str(user_index) + "-project-" + str(project_index)
+                role_binding = _get_role_binding_dict(user_name, project_name)
+                oc.delete(role_binding)
+            if args["createdbaastenant"]:
+                project_name = "user-" + str(user_index) + "-project-1"
+                dbaas_tenant = _get_dbaas_tenant(user_name, project_name)
+                oc.apply(dbaas_tenant)
 
-if args["giveadminrights"]:
-    batchSize = 100
-    startUserIndexRange = 1
-    for endUserIndexRange in range(batchSize, TOTAL_USERS + 1, batchSize):
-        for userIndex in range(startUserIndexRange, endUserIndexRange + 1, 1):
-            username = "user-" + str(userIndex)
-            for projectIndex in range(1, 3, 1):
-                projectname = "user-" + str(userIndex) + "-project-" + str(projectIndex)
-                rolebinding = _get_role_binding_dict(username, projectname)
-                oc.apply(rolebinding)
-        print("Processed batch {} to {}".format(startUserIndexRange, endUserIndexRange))
-        startUserIndexRange = endUserIndexRange + 1
+    print("Processed batch {} to {}".format(start_user_index, end_user_index))
+
+
+to_project = int(args["to"])
+from_project = int(args["from"])
+print("Projects from {} to {} will be processed".format(from_project, to_project))
+
+if to_project - from_project > 100:
+    batch_size = 100
+    for end_user_index_range in range(from_project + batch_size, to_project + 1, batch_size):
+        _process_batch(from_project, end_user_index_range)
+        from_project = end_user_index_range + 1
         time.sleep(1)
-
-if args["removeadminrights"]:
-    for userIndex in range(1, TOTAL_USERS + 1, 1):
-        username = "User-" + str(userIndex)
-        for projectIndex in range(1, 3, 1):
-            projectname = "user-" + str(userIndex) + "-project-" + str(projectIndex)
-            rolebinding = _get_role_binding_dict(username, projectname)
-            oc.delete(rolebinding)
-
-if args["createdbaastenant"]:
-    batchSize = 100
-    startUserIndexRange = 1
-    for endUserIndexRange in range(batchSize, TOTAL_USERS + 1, batchSize):
-        for userIndex in range(startUserIndexRange, endUserIndexRange + 1, 1):
-            username = "user-" + str(userIndex)
-            projectname = "user-" + str(userIndex) + "-project-1"
-            dbaastenant = _get_dbaas_tenant(username, projectname)
-            oc.apply(dbaastenant)
-        print("Processed batch {} to {}".format(startUserIndexRange, endUserIndexRange))
-        startUserIndexRange = endUserIndexRange + 1
-        time.sleep(1)
+else:
+    _process_batch(from_project, to_project)
 
 # if args["test"]:
 #     prg = oc.new_project("test")
