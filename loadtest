@@ -1,10 +1,12 @@
 #!/usr/bin/env python3.10
+
 import htpasswd
 import argparse
 from os.path import exists
 from pathlib import Path
 import openshift as oc
 import time
+from multiprocessing import Process
 
 parser = argparse.ArgumentParser(prog='loadtest', description="Program to loadtest dbaas operator")
 parser.add_argument("--task",
@@ -53,7 +55,7 @@ def _get_dbaas_tenant(user_name, project_name):
         "apiVersion": "dbaas.redhat.com/v1alpha1",
         "kind": "DBaaSTenant",
         "metadata": {
-            "name": user_name
+            "name": project_name
         },
         "spec": {
             "inventoryNamespace": project_name
@@ -62,12 +64,13 @@ def _get_dbaas_tenant(user_name, project_name):
 
 
 def _process_batch(start_user_index, end_user_index):
+    print("Launched batch {} to {} for task {}".format(start_user_index, end_user_index, args['task']))
     for user_index in range(start_user_index, end_user_index + 1, 1):
         user_name = "user-" + str(user_index)
+
         for project_index in range(1, 3, 1):
             match args['task']:
                 case "createprojects":
-                    # continue
                     oc.new_project("user-" + str(user_index) + "-project-" + str(project_index))
                 case "deleteprojects":
                     oc.delete_project("user-" + str(user_index) + "-project-" + str(project_index))
@@ -80,31 +83,43 @@ def _process_batch(start_user_index, end_user_index):
                     role_binding = _get_role_binding_dict(user_name, project_name)
                     oc.delete(role_binding)
                 case "createdbaastenants":
-                    project_name = "user-" + str(user_index) + "-project-1"
+                    project_name = "user-" + str(user_index) + "-project-" + str(project_index)
                     dbaas_tenant = _get_dbaas_tenant(user_name, project_name)
                     oc.apply(dbaas_tenant)
+                case "removedbaastenants":
+                    project_name = "user-" + str(user_index) + "-project-" + str(project_index)
+                    dbaas_tenant = _get_dbaas_tenant(user_name, project_name)
+                    oc.delete(dbaas_tenant, ignore_not_found=True)
 
-    print("Processed batch {} to {}".format(start_user_index, end_user_index))
+    print("Processed batch {} to {} for task {}".format(start_user_index, end_user_index, args['task']))
 
 
-if args["file"]:
-    filename = args["file"]
-    # if htpasswd file doesn't exist in local dir then create one.
-    if not exists(filename):
-        Path(filename).touch()
-    with htpasswd.Basic(filename, mode="md5") as userdb:
-        for index in range(from_target, to_target + 1, 1):
-            try:
-                userdb.add("user-" + str(index), "user" + str(index))
-            except htpasswd.basic.UserExists as error:
-                print(error)
-else:
-    print("Projects from {} to {} will be processed".format(from_target, to_target))
-
-    while to_target - from_target > 100:
-        batch_size = 100
-        _process_batch(from_target, from_target+batch_size)
-        from_target += batch_size + 1
-        time.sleep(1)
+if __name__ == '__main__':
+    if args["file"]:
+        filename = args["file"]
+        # if htpasswd file doesn't exist in local dir then create one.
+        if not exists(filename):
+            Path(filename).touch()
+        with htpasswd.Basic(filename, mode="md5") as userdb:
+            for index in range(from_target, to_target + 1, 1):
+                try:
+                    userdb.add("user-" + str(index), "user" + str(index))
+                except htpasswd.basic.UserExists as error:
+                    print(error)
     else:
-        _process_batch(from_target, to_target)
+        print("Projects from {} to {} will be processed for task {}".format(from_target, to_target, args['task']))
+        processes = []
+        while to_target - from_target > 100:
+            batch_size = 100
+            process = Process(target=_process_batch, args=(from_target, from_target+batch_size))
+            process.start()
+            processes.append(process)
+            from_target += batch_size + 1
+            # time.sleep(1)
+        else:
+            process = Process(target=_process_batch, args=(from_target, to_target))
+            process.start()
+            processes.append(process)
+
+        for p in processes:
+            p.join()
