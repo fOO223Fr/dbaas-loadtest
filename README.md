@@ -1,20 +1,30 @@
 ## command
-`$ python ./loadtest.py -h`
+`cd $WORK_DIR`
+`$./loadtest -h`
 
 # usage
 ```
-loadtest.py [-h] [--createprojects] [--deleteprojects] [--giveadminrights] [--removeadminrights]
-[--createdbaastenant] [--test] [--file FILE]
+usage: loadtest [-h]
+                [--task [
+                    {
+                        createprojects,
+                        deleteprojects,
+                        giveadminrights,
+                        removeadminrights,
+                        createdbaastenants,
+                        removedbaastenants
+                    }
+                ]
+                ]
+                --from FROM --to TO [--file FILE]
 
 Program to loadtest dbaas operator
 
 options:
--h, --help           show this help message and exit
---createprojects     Create projects
---deleteprojects     Delete projects
---giveadminrights    Give rights of projects to users
---removeadminrights  Remove rights of projects from users
---createdbaastenant  Create dbaas tenant
---test               Testing
---file FILE          Enter htpasswd file path
+  -h, --help            show this help message and exit
+  --task [{createprojects,deleteprojects,giveadminrights,removeadminrights,createdbaastenants,removedbaastenants}]
+                        Select what to task perform
+  --from FROM           Where to start from. example: --from 1 (represents user 1)
+  --to TO               Where to end. example: --to 2000 (represents user 2000)
+  --file FILE           Enter htpasswd file path
 ```
