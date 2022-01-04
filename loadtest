@@ -81,7 +81,7 @@ def _process_batch(start_user_index, end_user_index):
                 case "removeadminrights":
                     project_name = "user-" + str(user_index) + "-project-" + str(project_index)
                     role_binding = _get_role_binding_dict(user_name, project_name)
-                    oc.delete(role_binding)
+                    oc.delete(role_binding, ignore_not_found=True)
                 case "createdbaastenants":
                     project_name = "user-" + str(user_index) + "-project-" + str(project_index)
                     dbaas_tenant = _get_dbaas_tenant(user_name, project_name)
@@ -109,13 +109,12 @@ if __name__ == '__main__':
     else:
         print("Projects from {} to {} will be processed for task {}".format(from_target, to_target, args['task']))
         processes = []
-        while to_target - from_target > 100:
-            batch_size = 100
+        batch_size = 50
+        while to_target - from_target > batch_size:
             process = Process(target=_process_batch, args=(from_target, from_target+batch_size))
             process.start()
             processes.append(process)
             from_target += batch_size + 1
-            # time.sleep(1)
         else:
             process = Process(target=_process_batch, args=(from_target, to_target))
             process.start()
