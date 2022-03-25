@@ -13,7 +13,9 @@ parser.add_argument("--task",
                     choices=['createprojects', 'deleteprojects',
                              'giveadminrights','removeadminrights',
                              'createdbaastenants', 'removedbaastenants',
-                             'createrandomobjects'],
+                             'createrandomobjects',
+                             'createdbaasinventory',
+                             'createdbaasconn'],
                     nargs='?',
                     help='Select what to task perform',
                     )
@@ -178,6 +180,46 @@ def _get_rand_config_map(user_name, project_name):
     }
 
 
+def _get_dbaas_inventories(project_name):
+    return {
+        "apiVersion": "dbaas.redhat.com/v1alpha1",
+        "kind": "DBaaSInventory",
+        "metadata": {
+            "name": project_name,
+            "labels": {
+                "auto": "true"
+            }
+        },
+        "spec": {
+            "credentialsRef": {
+                "name": "dbaas-vendor-credentials-1648227177907",
+                "namespace": "openshift-dbaas-operator"
+            },
+            "providerRef": {
+                "name": "cockroachdb-cloud-registration"
+            }
+        }
+    }
+
+def _get_dbaas_connection(project_name):
+    return {
+        "apiVersion": "dbaas.redhat.com/v1alpha1",
+        "kind": "DBaaSConnection",
+        "metadata": {
+            "name": "conn-"+project_name,
+            "labels": {
+                "auto": "true"
+            }
+        },
+        "spec": {
+            "instanceID": "2fe15323-5436-4bd6-a9c2-fd10045a5017",
+            "inventoryRef": {
+                "name": "test",
+                "namespace": "openshift-dbaas-operator"
+            }
+        }
+    }
+
 def _process_batch(start_user_index, end_user_index):
     print("Launched batch {} to {} for task {}".format(start_user_index, end_user_index, args['task']))
     for user_index in range(start_user_index, end_user_index + 1, 1):
@@ -210,7 +252,12 @@ def _process_batch(start_user_index, end_user_index):
                     options = ["deploy", "secret", "configmap", "pod"]
                     random_choose_object = random.choice(options)+"_template"
                     oc.apply(locals()[random_choose_object])
-                    # oc.apply(deploy_template)
+                case "createdbaasinventory":
+                    dbaas_inventory_template = _get_dbaas_inventories(project_name)
+                    oc.apply(dbaas_inventory_template)
+                case "createdbaasconn":
+                    dbaas_connection_template = _get_dbaas_connection(project_name)
+                    oc.apply(dbaas_connection_template)
 
     print("Processed batch {} to {} for task {}".format(start_user_index, end_user_index, args['task']))
 
